@@ -3,6 +3,7 @@
 [![Terraform CI](https://github.com/aniketnandi/Terraform-AWS-Infrastructure/actions/workflows/terraform.yml/badge.svg)](https://github.com/aniketnandi/Terraform-AWS-Infrastructure/actions/workflows/terraform.yml)
 ![Terraform](https://img.shields.io/badge/Terraform-%E2%89%A51.5-7B42BC?logo=terraform&logoColor=white)
 ![AWS](https://img.shields.io/badge/AWS-VPC%20%7C%20EC2-FF9900?logo=amazonaws&logoColor=white)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 Infrastructure as Code that provisions a networked, secured web server on AWS in one `terraform apply`. It builds a custom VPC from scratch, with public routing, a security group with least-privilege ingress, and an Amazon Linux 2023 EC2 instance that sets itself up as an Apache web server.
 
@@ -135,3 +136,7 @@ Ideas for taking this toward a production setup:
 ## Author
 
 **Aniket Nandi** · [github.com/aniketnandi](https://github.com/aniketnandi)
+
+## License
+
+Released under the [MIT License](LICENSE).
