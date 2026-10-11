@@ -58,7 +58,43 @@ flowchart LR
 └── terraform.tfvars.example         # Example variable values
 ```
 
+## Try it without an AWS account
+
+You can check the configuration in about two minutes with only [Terraform](https://developer.hashicorp.com/terraform/install) installed. None of these commands need AWS credentials or create any resources.
+
+```bash
+git clone https://github.com/aniketnandi/Terraform-AWS-Infrastructure.git
+cd Terraform-AWS-Infrastructure
+
+terraform init -backend=false   # downloads the AWS provider
+terraform validate              # checks syntax, types, and references
+terraform fmt -check            # checks formatting
+```
+
+Expected output from `validate`:
+
+```
+Success! The configuration is valid.
+```
+
+To see the input validation reject unsafe or invalid settings before anything reaches AWS:
+
+```bash
+echo 'var.ssh_allowed_cidrs' | terraform console -var='ssh_allowed_cidrs=["0.0.0.0/0"]'
+```
+
+```
+Error: Invalid value for variable
+
+ssh_allowed_cidrs must contain valid CIDR blocks and must not include
+0.0.0.0/0.
+```
+
+The same checks, plus `tflint`, run on every push. See the [CI runs](https://github.com/aniketnandi/Terraform-AWS-Infrastructure/actions/workflows/terraform.yml).
+
 ## Quick start
+
+To deploy for real you need an AWS account. The steps below create billable resources; see [Cost](#cost).
 
 **Prerequisites:** Terraform ≥ 1.5, an AWS account, and credentials set up for the AWS CLI (`aws configure` or environment variables).
 
