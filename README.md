@@ -1,135 +1,137 @@
 # AWS Infrastructure with Terraform
 
-Infrastructure-as-Code project demonstrating automated provisioning of AWS cloud resources using Terraform.
+[![Terraform CI](https://github.com/aniketnandi/Terraform-AWS-Infrastructure/actions/workflows/terraform.yml/badge.svg)](https://github.com/aniketnandi/Terraform-AWS-Infrastructure/actions/workflows/terraform.yml)
+![Terraform](https://img.shields.io/badge/Terraform-%E2%89%A51.5-7B42BC?logo=terraform&logoColor=white)
+![AWS](https://img.shields.io/badge/AWS-VPC%20%7C%20EC2-FF9900?logo=amazonaws&logoColor=white)
+
+Infrastructure as Code that provisions a networked, secured web server on AWS in one `terraform apply`. It builds a custom VPC from scratch, with public routing, a security group with least-privilege ingress, and an Amazon Linux 2023 EC2 instance that sets itself up as an Apache web server.
 
 ## Architecture
 
-This project provisions a complete AWS infrastructure stack including:
-- **VPC** with custom CIDR block and DNS support
-- **Public Subnet** with internet gateway routing
-- **EC2 Instance** (Amazon Linux 2) with automated web server setup
-- **Security Group** with HTTP and SSH access controls
-- **Internet Gateway** for public internet connectivity
+```mermaid
+flowchart LR
+    user([Internet user]) -->|HTTP :80| igw
 
-## Prerequisites
+    subgraph aws[AWS Region]
+        subgraph vpc[VPC 10.0.0.0/16]
+            igw[Internet Gateway]
+            rt[Public route table<br/>0.0.0.0/0 → IGW]
+            subgraph subnet[Public subnet 10.0.1.0/24]
+                subgraph sg[Security group<br/>80 open · 22 allow-list only]
+                    ec2[EC2 · Amazon Linux 2023<br/>Apache · IMDSv2 · encrypted gp3]
+                end
+            end
+        end
+    end
 
-- Terraform >= 1.0
-- AWS CLI configured with credentials
-- AWS account with appropriate permissions
-
-## Project Structure
-
-```
-terraform-aws-infrastructure/
-├── main.tf         # Core infrastructure resources
-├── variables.tf    # Input variables and defaults
-├── outputs.tf      # Output values after deployment
-└── README.md       # Project documentation
+    igw --- rt --- subnet
 ```
 
-## Quick Start
+| Resource | Purpose |
+|----------|---------|
+| `aws_vpc` | Isolated network with DNS hostnames enabled |
+| `aws_internet_gateway` + `aws_route_table` | Public internet routing for the subnet |
+| `aws_subnet` | Public subnet in the region's first available AZ |
+| `aws_security_group` | HTTP from anywhere; SSH **closed by default**, opened only to listed CIDRs |
+| `aws_instance` | Web server set up by a templated `user_data.sh` script |
 
-### 1. Configure AWS Credentials
+## Design decisions
+
+- **Secure defaults.** Port 22 stays closed unless `ssh_allowed_cidrs` is set, and a validation rule rejects `0.0.0.0/0`. The instance requires **IMDSv2**, which blocks SSRF-style credential theft, and the root EBS volume is **encrypted**.
+- **Current AMI without hard-coding.** The Amazon Linux 2023 AMI ID comes from AWS's public SSM parameter, so every deploy picks up the latest patched image in any region.
+- **Consistent tagging.** The provider-level `default_tags` setting applies `Project`, `Environment`, and `ManagedBy` tags to every resource. Names follow the pattern `<project>-<env>-<resource>`.
+- **Input validation.** Variables reject bad CIDRs, unknown environments, and invalid name formats when you run `plan`, before anything is sent to AWS.
+- **CI on every push.** GitHub Actions runs `terraform fmt -check`, `terraform validate`, and `tflint` with the AWS ruleset.
+
+## Project structure
+
+```
+.
+├── .github/workflows/terraform.yml  # CI: fmt, validate, tflint
+├── .tflint.hcl                      # Linter configuration
+├── versions.tf                      # Terraform and provider version constraints
+├── main.tf                          # Provider, networking, security, compute
+├── variables.tf                     # Inputs with validation
+├── outputs.tf                       # IDs, public IP, and web URL
+├── user_data.sh                     # EC2 bootstrap script (templated)
+└── terraform.tfvars.example         # Example variable values
+```
+
+## Quick start
+
+**Prerequisites:** Terraform ≥ 1.5, an AWS account, and credentials set up for the AWS CLI (`aws configure` or environment variables).
 
 ```bash
-aws configure
-# Enter your AWS Access Key ID
-# Enter your AWS Secret Access Key
-# Default region: us-east-1
-```
+git clone https://github.com/aniketnandi/Terraform-AWS-Infrastructure.git
+cd Terraform-AWS-Infrastructure
 
-### 2. Initialize Terraform
-
-```bash
+cp terraform.tfvars.example terraform.tfvars   # optional: customize
 terraform init
-```
-
-### 3. Preview Infrastructure Changes
-
-```bash
 terraform plan
-```
-
-### 4. Deploy Infrastructure
-
-```bash
 terraform apply
 ```
 
-Type `yes` when prompted to confirm deployment.
+When the apply finishes, Terraform prints the endpoint:
 
-### 5. Access Web Server
-
-After deployment completes, Terraform outputs the web server URL:
 ```
-web_url = "http://[PUBLIC_IP]"
+web_url = "http://ec2-xx-xx-xx-xx.compute-1.amazonaws.com"
 ```
 
-Visit this URL to verify the deployment.
+The page loads after the instance finishes booting, usually within a minute or two.
 
-### 6. Destroy Infrastructure (Cleanup)
+**Clean up** to avoid charges:
 
 ```bash
 terraform destroy
 ```
 
-Type `yes` when prompted to confirm resource deletion.
-
 ## Configuration
-
-Customize deployment by modifying `variables.tf` or using command-line variables:
-
-```bash
-terraform apply -var="instance_type=t3.small" -var="environment=staging"
-```
-
-### Available Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `aws_region` | AWS region for resources | `us-east-1` |
-| `project_name` | Project name for tagging | `terraform-demo` |
-| `environment` | Environment name | `dev` |
+| `aws_region` | AWS region to deploy into | `us-east-1` |
+| `project_name` | Prefix for resource names and tags | `terraform-demo` |
+| `environment` | `dev`, `staging`, or `prod` | `dev` |
 | `vpc_cidr` | VPC CIDR block | `10.0.0.0/16` |
 | `public_subnet_cidr` | Public subnet CIDR | `10.0.1.0/24` |
-| `instance_type` | EC2 instance type | `t2.micro` |
+| `instance_type` | EC2 instance type | `t3.micro` |
+| `root_volume_size` | Encrypted root volume size (GiB) | `8` |
+| `key_name` | Existing EC2 key pair for SSH | `null` |
+| `ssh_allowed_cidrs` | CIDRs allowed to SSH (empty = closed) | `[]` |
 
-## Resources Created
+To enable SSH from your own IP only:
 
-- **1 VPC** with DNS support
-- **1 Internet Gateway**
-- **1 Public Subnet** in first availability zone
-- **1 Route Table** with internet routing
-- **1 Security Group** (ports 22, 80)
-- **1 EC2 Instance** (t2.micro by default)
+```bash
+terraform apply \
+  -var='key_name=my-keypair' \
+  -var="ssh_allowed_cidrs=[\"$(curl -s https://checkip.amazonaws.com)/32\"]"
+```
 
-## Cost Considerations
+## Outputs
 
-Resources use AWS Free Tier eligible configurations where possible:
-- **t2.micro** EC2 instance (750 hours/month free for first 12 months)
-- Minimal data transfer for testing
+| Output | Description |
+|--------|-------------|
+| `vpc_id` | ID of the VPC |
+| `public_subnet_id` | ID of the public subnet |
+| `security_group_id` | ID of the web security group |
+| `web_instance_id` | ID of the EC2 instance |
+| `web_instance_public_ip` | Public IP of the instance |
+| `web_url` | HTTP URL of the web server |
 
-**Remember to destroy resources after testing to avoid charges.**
+## Cost
 
-## Key Features
+With default settings this stays within the AWS Free Tier for eligible accounts (`t3.micro` and 8 GiB gp3). Otherwise it costs roughly $0.01 per hour in `us-east-1`. Run `terraform destroy` when you're done.
 
-**Modular Design** - Reusable variables and clean structure  
-**Automated Provisioning** - Full infrastructure deployment in minutes  
-**Security Best Practices** - Controlled ingress/egress rules  
-**Production-Ready Patterns** - Tagging, naming conventions, documentation
+## Roadmap
 
-## Learning Outcomes
+Ideas for taking this toward a production setup:
 
-- Infrastructure-as-Code principles with Terraform
-- AWS VPC networking and security configuration
-- EC2 instance provisioning and user data automation
-- Terraform state management and resource dependencies
+- Remote state in S3 with DynamoDB locking
+- Multi-AZ public and private subnets with a NAT gateway
+- Application Load Balancer and Auto Scaling group in place of the single instance
+- Access through SSM Session Manager instead of SSH
+- HTTPS with ACM and a custom domain in Route 53
 
 ## Author
 
-**Aniket Nandi**  
-GitHub: [github.com/aniketnandi](https://github.com/aniketnandi)
-
----
-
-*Built as part of cloud engineering portfolio demonstrating DevOps and infrastructure automation skills.*
+**Aniket Nandi** · [github.com/aniketnandi](https://github.com/aniketnandi)

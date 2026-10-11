@@ -1,0 +1,11 @@
+# Copy to terraform.tfvars and adjust. terraform.tfvars is git-ignored.
+
+aws_region   = "us-east-1"
+project_name = "terraform-demo"
+environment  = "dev"
+
+instance_type = "t3.micro"
+
+# Optional: enable SSH from your own IP only
+# key_name          = "my-keypair"
+# ssh_allowed_cidrs = ["203.0.113.10/32"]
